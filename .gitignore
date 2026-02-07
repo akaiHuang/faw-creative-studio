@@ -1,0 +1,5 @@
+node_modules
+.vercel
+
+# BlogSys - 獨立 git repo
+blogsys/

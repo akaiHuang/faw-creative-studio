@@ -1,0 +1,35 @@
+{
+  "name": "faw-studio",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "dev:https": "next dev --experimental-https",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@react-three/cannon": "^6.6.0",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.5.0",
+    "clsx": "^2.1.0",
+    "esbuild": "^0.27.2",
+    "firebase": "^10.7.1",
+    "framer-motion": "^10.16.16",
+    "gsap": "^3.14.2",
+    "locomotive-scroll": "^5.0.1",
+    "lucide-react": "^0.294.0",
+    "next": "^16.1.1",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "tailwind-merge": "^2.2.0",
+    "three": "^0.182.0"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8",
+    "tailwindcss": "^3.3.0"
+  }
+}

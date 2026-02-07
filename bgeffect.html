@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js 進階有機形狀展示 (多幾何體版)</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #000; 
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: white;
+        }
+        
+        #canvas-container { 
+            width: 100vw; 
+            height: 100vh; 
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        
+        /* UI 介面設計 */
+        .ui-layer {
+            position: absolute;
+            bottom: 40px;
+            left: 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            pointer-events: none;
+            gap: 15px; /* 增加間距 */
+        }
+
+        /* 形狀切換按鈕群組 */
+        .shape-switcher {
+            display: flex;
+            gap: 10px;
+            pointer-events: auto;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 8px;
+            border-radius: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .shape-btn {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.7);
+            padding: 6px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            width: auto;
+            height: auto;
+        }
+
+        .shape-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-color: white;
+        }
+
+        .shape-btn.active {
+            background: white;
+            color: black;
+            border-color: white;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+        }
+
+        /* 原有的樣式控制列 */
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            background: rgba(20, 20, 20, 0.6);
+            backdrop-filter: blur(15px);
+            padding: 15px 30px;
+            border-radius: 50px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            pointer-events: auto;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+        }
+
+        .nav-btn {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            transition: all 0.2s ease;
+        }
+
+        .nav-btn:hover {
+            background: white;
+            color: black;
+            transform: scale(1.1);
+        }
+
+        .nav-btn:active {
+            transform: scale(0.95);
+        }
+
+        .info {
+            text-align: center;
+            min-width: 220px;
+        }
+
+        h2 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        p {
+            margin: 4px 0 0 0;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            font-family: monospace;
+        }
+
+        .tag {
+            display: inline-block;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.1);
+            margin-top: 5px;
+            color: #aaa;
+        }
+        
+        #loader {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+            transition: opacity 0.5s;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loader">初始化 Shader 編譯中...</div>
+
+    <div id="canvas-container"></div>
+    
+    <div class="ui-layer">
+        <!-- 新增形狀切換區 -->
+        <div class="shape-switcher">
+            <button class="shape-btn active" data-shape="sphere">圓形</button>
+            <button class="shape-btn" data-shape="box">方塊</button>
+            <button class="shape-btn" data-shape="torus">甜甜圈</button>
+            <button class="shape-btn" data-shape="capsule">膠囊</button>
+        </div>
+
+        <!-- 原有的樣式切換區 -->
+        <div class="controls">
+            <button id="prevBtn" class="nav-btn">❮</button>
+            <div class="info">
+                <h2 id="presetName">Loading...</h2>
+                <div id="presetTag" class="tag">STYLE</div>
+                <p id="presetIndex">1 / 25</p>
+            </div>
+            <button id="nextBtn" class="nav-btn">❯</button>
+        </div>
+    </div>
+
+    <!-- 引入 Three.js -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ==========================================
+        // 1. 初始化場景
+        // ==========================================
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.z = 4.5;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        setTimeout(() => {
+            const loader = document.getElementById('loader');
+            loader.style.opacity = '0';
+            setTimeout(() => loader.remove(), 500);
+        }, 500);
+
+        // ==========================================
+        // 2. Shader GLSL 程式碼
+        // ==========================================
+        
+        const vertexShader = `
+            uniform float uTime;
+            uniform float uFrequency;
+            uniform float uAmplitude;
+            uniform float uSpeed;
+            
+            uniform float uSharpness;
+            uniform float uGlobalDistort;
+            uniform float uGlobalFreq;
+
+            varying float vDistortion;
+            varying float vFresnelBias;
+            varying vec3 vNormal;
+            varying vec2 vUv;
+            varying vec3 vViewPosition;
+
+            // Simplex Noise 3D
+            vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+            vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+            vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+            vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+            float snoise(vec3 v) {
+                const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+                const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+                vec3 i  = floor(v + dot(v, C.yyy));
+                vec3 x0 = v - i + dot(i, C.xxx);
+                vec3 g = step(x0.yzx, x0.xyz);
+                vec3 l = 1.0 - g;
+                vec3 i1 = min( g.xyz, l.zxy );
+                vec3 i2 = max( g.xyz, l.zxy );
+                vec3 x1 = x0 - i1 + C.xxx;
+                vec3 x2 = x0 - i2 + C.yyy;
+                vec3 x3 = x0 - D.yyy;
+                i = mod289(i);
+                vec4 p = permute( permute( permute(
+                        i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                        + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
+                        + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+                float n_ = 0.142857142857;
+                vec3  ns = n_ * D.wyz - D.xzx;
+                vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+                vec4 x_ = floor(j * ns.z);
+                vec4 y_ = floor(j - 7.0 * x_ );
+                vec4 x = x_ *ns.x + ns.yyyy;
+                vec4 y = y_ *ns.x + ns.yyyy;
+                vec4 h = 1.0 - abs(x) - abs(y);
+                vec4 b0 = vec4( x.xy, y.xy );
+                vec4 b1 = vec4( x.zw, y.zw );
+                vec4 s0 = floor(b0)*2.0 + 1.0;
+                vec4 s1 = floor(b1)*2.0 + 1.0;
+                vec4 sh = -step(h, vec4(0.0));
+                vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+                vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+                vec3 p0 = vec3(a0.xy,h.x);
+                vec3 p1 = vec3(a0.zw,h.y);
+                vec3 p2 = vec3(a1.xy,h.z);
+                vec3 p3 = vec3(a1.zw,h.w);
+                vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+                p0 *= norm.x;
+                p1 *= norm.y;
+                p2 *= norm.z;
+                p3 *= norm.w;
+                vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+                m = m * m;
+                return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );
+            }
+
+            void main() {
+                vUv = uv;
+                
+                // 1. 宏觀變形 (Global Shape)
+                float globalNoise = snoise(vec3(position * uGlobalFreq + uTime * uSpeed * 0.5));
+                vec3 basePosition = position + normal * globalNoise * uGlobalDistort;
+
+                // 2. 微觀細節 (Surface Detail)
+                float noise = snoise(vec3(basePosition * uFrequency + uTime * uSpeed));
+                
+                // 3. 尖銳度邏輯 (Sharpness)
+                float smoothNoise = noise;
+                float sharpNoise = 1.0 - abs(noise);
+                
+                float finalDistortion = mix(smoothNoise, sharpNoise, uSharpness);
+                vDistortion = finalDistortion;
+
+                // 4. 最終頂點位置 (沿法線擠出)
+                vec3 newPosition = basePosition + normal * finalDistortion * uAmplitude;
+
+                vNormal = normal;
+                
+                vec4 mvPosition = modelViewMatrix * vec4(newPosition, 1.0);
+                vViewPosition = -mvPosition.xyz;
+                gl_Position = projectionMatrix * mvPosition;
+            }
+        `;
+
+        const fragmentShader = `
+            uniform vec3 uColorBase;
+            uniform vec3 uColorPeak;
+            uniform vec3 uColorRim;
+            uniform float uSharpness;
+            
+            varying float vDistortion;
+            varying vec3 vNormal;
+            varying vec3 vViewPosition;
+
+            void main() {
+                float d = vDistortion;
+                if(uSharpness < 0.5) {
+                    d = d * 0.5 + 0.5;
+                }
+                
+                vec3 color = mix(uColorBase, uColorPeak, d);
+                
+                vec3 viewDir = normalize(vViewPosition);
+                vec3 normal = normalize(vNormal);
+                float fresnel = dot(viewDir, normal);
+                fresnel = clamp(1.0 - fresnel, 0.0, 1.0);
+                
+                float rimPower = mix(2.0, 4.0, uSharpness); 
+                float rimIntensity = pow(fresnel, rimPower);
+
+                color = mix(color, uColorRim, rimIntensity);
+
+                float spec = pow(fresnel, 10.0);
+                color += uColorRim * spec * 0.5;
+
+                gl_FragColor = vec4(color, 1.0);
+            }
+        `;
+
+        // ==========================================
+        // 3. 創建幾何體 (準備多種形狀)
+        // ==========================================
+        
+        // 重要：所有幾何體都必須有「足夠高的細分 (segments)」，
+        // 否則變形時會出現破洞或明顯的三角形稜角。
+
+        const geometries = {
+            // 圓形：使用二十面體細分 (最均勻)
+            sphere: new THREE.IcosahedronGeometry(1, 200),
+            
+            // 方塊：需要很高的寬高深段數 (64x64x64)
+            box: new THREE.BoxGeometry(1.5, 1.5, 1.5, 64, 64, 64),
+            
+            // 甜甜圈：(半徑, 管徑, 徑向細分, 管狀細分)
+            torus: new THREE.TorusGeometry(1, 0.4, 128, 256),
+            
+            // 膠囊：(半徑, 長度, 蓋子細分, 徑向細分)
+            capsule: new THREE.CapsuleGeometry(0.7, 1.5, 32, 64)
+        };
+
+        const material = new THREE.ShaderMaterial({
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader,
+            uniforms: {
+                uTime: { value: 0 },
+                uFrequency: { value: 1.0 },
+                uAmplitude: { value: 0.3 },
+                uSpeed: { value: 0.2 },
+                uSharpness: { value: 0.0 },
+                uGlobalDistort: { value: 0.0 },
+                uGlobalFreq: { value: 0.5 },
+                uColorBase: { value: new THREE.Color(0x000000) },
+                uColorPeak: { value: new THREE.Color(0x000000) },
+                uColorRim: { value: new THREE.Color(0x000000) },
+            },
+        });
+
+        // 預設使用球體
+        let currentShape = 'sphere';
+        const blob = new THREE.Mesh(geometries[currentShape], material);
+        scene.add(blob);
+
+        // ==========================================
+        // 4. 定義 25 種樣式 (Presets)
+        // ==========================================
+        
+        const presets = [
+            // --- 類別 A: 圓潤流體 (Smooth Blobs) ---
+            { name: "霓虹史萊姆 (Slime)", tag: "LIQUID", sharp: 0.0, gDist: 0.2, gFreq: 0.5, freq: 1.5, amp: 0.3, speed: 0.3, colors: ["#2E0249", "#F806CC", "#00FFFF"] },
+            { name: "水銀滴 (Mercury)", tag: "LIQUID", sharp: 0.0, gDist: 0.8, gFreq: 0.3, freq: 0.5, amp: 0.1, speed: 0.2, colors: ["#333333", "#AAAAAA", "#FFFFFF"] },
+            { name: "岩漿球 (Magma)", tag: "LIQUID", sharp: 0.1, gDist: 0.3, gFreq: 1.0, freq: 1.2, amp: 0.35, speed: 0.15, colors: ["#500000", "#FF3300", "#FFFF00"] },
+            { name: "肥皂泡 (Bubble)", tag: "SOFT", sharp: 0.0, gDist: 0.1, gFreq: 0.2, freq: 0.5, amp: 0.05, speed: 0.2, colors: ["#FFC0CB", "#EE82EE", "#FFFFFF"] },
+            
+            // --- 類別 B: 尖銳結晶 (Crystals & Spikes) ---
+            { name: "黑曜石 (Obsidian)", tag: "CRYSTAL", sharp: 1.0, gDist: 0.0, gFreq: 0.0, freq: 1.5, amp: 0.4, speed: 0.05, colors: ["#000000", "#1A1A1A", "#555555"] },
+            { name: "冰霜之心 (Frost)", tag: "CRYSTAL", sharp: 0.9, gDist: 0.4, gFreq: 0.8, freq: 2.5, amp: 0.3, speed: 0.1, colors: ["#002244", "#55AAFF", "#FFFFFF"] },
+            { name: "氪星石 (Kryptonite)", tag: "CRYSTAL", sharp: 0.85, gDist: 0.6, gFreq: 0.4, freq: 1.0, amp: 0.5, speed: 0.1, colors: ["#003300", "#00FF00", "#CCFFCC"] },
+            { name: "黃金刺 (Gold Spike)", tag: "METAL", sharp: 1.0, gDist: 0.2, gFreq: 2.0, freq: 3.0, amp: 0.2, speed: 0.2, colors: ["#332200", "#FFD700", "#FFFFAA"] },
+
+            // --- 類別 C: 高度變形 (Distorted / Alien) ---
+            { name: "外星異種 (Alien)", tag: "ORGANIC", sharp: 0.3, gDist: 2.0, gFreq: 0.4, freq: 2.0, amp: 0.2, speed: 0.4, colors: ["#1A0033", "#4B0082", "#00FF00"] },
+            { name: "蠕蟲 (Worm)", tag: "ORGANIC", sharp: 0.2, gDist: 1.5, gFreq: 0.2, freq: 0.5, amp: 0.2, speed: 0.3, colors: ["#3E2723", "#8D6E63", "#D7CCC8"] },
+            { name: "扭曲虛空 (Void)", tag: "CHAOS", sharp: 0.6, gDist: 1.8, gFreq: 0.8, freq: 1.0, amp: 0.6, speed: 0.2, colors: ["#000000", "#110033", "#FF00FF"] },
+            { name: "聲波紋 (Soundwave)", tag: "DIGITAL", sharp: 0.5, gDist: 0.5, gFreq: 4.0, freq: 5.0, amp: 0.15, speed: 0.8, colors: ["#000000", "#00FF41", "#FFFFFF"] },
+
+            // --- 類別 D: 混合風格 (Hybrid) ---
+            { name: "珊瑚礁 (Coral)", tag: "NATURE", sharp: 0.7, gDist: 1.0, gFreq: 1.2, freq: 3.0, amp: 0.3, speed: 0.05, colors: ["#800020", "#FF6F61", "#FFDAB9"] },
+            { name: "雲端 (Cloud)", tag: "SOFT", sharp: 0.0, gDist: 1.2, gFreq: 0.3, freq: 2.0, amp: 0.4, speed: 0.1, colors: ["#666699", "#CCCCFF", "#FFFFFF"] },
+            { name: "生鏽廢鐵 (Scrap)", tag: "METAL", sharp: 0.9, gDist: 0.5, gFreq: 0.5, freq: 4.0, amp: 0.1, speed: 0.0, colors: ["#3E2723", "#BF360C", "#000000"] },
+            { name: "量子波動 (Quantum)", tag: "ENERGY", sharp: 0.4, gDist: 0.3, gFreq: 3.0, freq: 1.0, amp: 0.8, speed: 1.0, colors: ["#000033", "#4400CC", "#FF00AA"] },
+
+            // --- 類別 E: 特殊材質 ---
+            { name: "珍珠 (Pearl)", tag: "MINERAL", sharp: 0.1, gDist: 0.1, gFreq: 0.1, freq: 0.2, amp: 0.1, speed: 0.1, colors: ["#DDDDDD", "#FFF8E7", "#FFFFFF"] },
+            { name: "病毒體 (Virus)", tag: "BIO", sharp: 0.95, gDist: 0.2, gFreq: 0.5, freq: 6.0, amp: 0.25, speed: 0.1, colors: ["#330000", "#FF0000", "#550000"] },
+            { name: "油畫 (Oil Paint)", tag: "ART", sharp: 0.2, gDist: 0.9, gFreq: 0.6, freq: 1.5, amp: 0.5, speed: 0.05, colors: ["#141E30", "#243B55", "#F4A261"] },
+            { name: "賽博幾何 (Poly)", tag: "DIGITAL", sharp: 1.0, gDist: 0.0, gFreq: 0.0, freq: 0.5, amp: 0.8, speed: 0.2, colors: ["#2B2D42", "#8D99AE", "#EF233C"] },
+            
+            // --- 類別 F: 更多變體 ---
+            { name: "沼澤怪 (Swamp)", tag: "ORGANIC", sharp: 0.4, gDist: 1.3, gFreq: 0.6, freq: 2.5, amp: 0.3, speed: 0.1, colors: ["#1B3C02", "#4B8200", "#000000"] },
+            { name: "星雲 (Nebula)", tag: "SPACE", sharp: 0.0, gDist: 1.5, gFreq: 0.3, freq: 1.5, amp: 0.6, speed: 0.1, colors: ["#2E0249", "#A91079", "#FF9999"] },
+            { name: "金屬碎片 (Shards)", tag: "METAL", sharp: 1.0, gDist: 0.8, gFreq: 1.5, freq: 0.5, amp: 0.5, speed: 0.05, colors: ["#232526", "#414345", "#FFFFFF"] },
+            { name: "果凍 (Jelly)", tag: "SOFT", sharp: 0.1, gDist: 0.6, gFreq: 0.4, freq: 1.0, amp: 0.4, speed: 0.3, colors: ["#FF4E50", "#F9D423", "#FF9966"] },
+            { name: "深淵凝視 (Gaze)", tag: "CHAOS", sharp: 0.6, gDist: 0.1, gFreq: 1.0, freq: 3.0, amp: 0.6, speed: 0.5, colors: ["#000000", "#330000", "#FF0000"] }
+        ];
+
+        // ==========================================
+        // 5. 狀態管理與控制邏輯
+        // ==========================================
+        
+        let currentIndex = 0;
+        
+        const targetUniforms = {
+            sharp: 0, gDist: 0, gFreq: 0,
+            freq: 0, amp: 0, speed: 0,
+            cBase: new THREE.Color(),
+            cPeak: new THREE.Color(),
+            cRim: new THREE.Color()
+        };
+
+        function updateTarget(index) {
+            const p = presets[index];
+            
+            document.getElementById('presetName').innerText = p.name;
+            document.getElementById('presetIndex').innerText = `${index + 1} / ${presets.length}`;
+            document.getElementById('presetTag').innerText = p.tag;
+
+            targetUniforms.sharp = p.sharp;
+            targetUniforms.gDist = p.gDist;
+            targetUniforms.gFreq = p.gFreq;
+            targetUniforms.freq = p.freq;
+            targetUniforms.amp = p.amp;
+            targetUniforms.speed = p.speed;
+            targetUniforms.cBase.set(p.colors[0]);
+            targetUniforms.cPeak.set(p.colors[1]);
+            targetUniforms.cRim.set(p.colors[2]);
+        }
+
+        updateTarget(0);
+
+        // 初始化
+        material.uniforms.uSharpness.value = targetUniforms.sharp;
+        material.uniforms.uGlobalDistort.value = targetUniforms.gDist;
+        material.uniforms.uGlobalFreq.value = targetUniforms.gFreq;
+        material.uniforms.uFrequency.value = targetUniforms.freq;
+        material.uniforms.uAmplitude.value = targetUniforms.amp;
+        material.uniforms.uSpeed.value = targetUniforms.speed;
+        material.uniforms.uColorBase.value.copy(targetUniforms.cBase);
+        material.uniforms.uColorPeak.value.copy(targetUniforms.cPeak);
+        material.uniforms.uColorRim.value.copy(targetUniforms.cRim);
+
+        // --- 形狀切換邏輯 ---
+        document.querySelectorAll('.shape-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                // 更新按鈕樣式
+                document.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+
+                // 切換幾何體
+                const shapeType = e.target.dataset.shape;
+                if (geometries[shapeType]) {
+                    blob.geometry = geometries[shapeType];
+                    currentShape = shapeType;
+                }
+            });
+        });
+
+        // --- 樣式切換事件 ---
+        document.getElementById('prevBtn').addEventListener('click', () => {
+            currentIndex = (currentIndex - 1 + presets.length) % presets.length;
+            updateTarget(currentIndex);
+        });
+
+        document.getElementById('nextBtn').addEventListener('click', () => {
+            currentIndex = (currentIndex + 1) % presets.length;
+            updateTarget(currentIndex);
+        });
+        
+        window.addEventListener('keydown', (e) => {
+            if(e.key === 'ArrowLeft') document.getElementById('prevBtn').click();
+            if(e.key === 'ArrowRight') document.getElementById('nextBtn').click();
+        });
+
+        // ==========================================
+        // 6. 動畫迴圈
+        // ==========================================
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const elapsedTime = clock.getElapsedTime();
+            material.uniforms.uTime.value = elapsedTime;
+
+            const lerpFactor = 0.04;
+
+            material.uniforms.uSharpness.value += (targetUniforms.sharp - material.uniforms.uSharpness.value) * lerpFactor;
+            material.uniforms.uGlobalDistort.value += (targetUniforms.gDist - material.uniforms.uGlobalDistort.value) * lerpFactor;
+            material.uniforms.uGlobalFreq.value += (targetUniforms.gFreq - material.uniforms.uGlobalFreq.value) * lerpFactor;
+            
+            material.uniforms.uFrequency.value += (targetUniforms.freq - material.uniforms.uFrequency.value) * lerpFactor;
+            material.uniforms.uAmplitude.value += (targetUniforms.amp - material.uniforms.uAmplitude.value) * lerpFactor;
+            material.uniforms.uSpeed.value += (targetUniforms.speed - material.uniforms.uSpeed.value) * lerpFactor;
+
+            material.uniforms.uColorBase.value.lerp(targetUniforms.cBase, lerpFactor);
+            material.uniforms.uColorPeak.value.lerp(targetUniforms.cPeak, lerpFactor);
+            material.uniforms.uColorRim.value.lerp(targetUniforms.cRim, lerpFactor);
+
+            // 自轉 (根據形狀微調旋轉方式可能更好看，這裡統一處理)
+            blob.rotation.y += 0.002;
+            blob.rotation.x += 0.001;
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

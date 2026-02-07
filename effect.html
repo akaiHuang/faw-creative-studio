@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Text Array + Fog</title>
+    <style>
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: #000; 
+            font-family: 'Courier New', Courier, monospace;
+        }
+        canvas { 
+            display: block; 
+        }
+        #info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: #ffffff;
+            opacity: 0.7;
+            pointer-events: none;
+            text-align: left;
+            z-index: 10;
+        }
+        h1 {
+            font-size: 14px;
+            margin: 0 0 5px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+        p {
+            font-size: 12px;
+            margin: 0;
+            color: #888;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            pointer-events: none;
+            transition: opacity 0.5s;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">LOADING FONT...</div>
+    <div id="info">
+        <h1>Text Array & Fog</h1>
+        <p>Adjust Thickness, Array Counts & Fog Density</p>
+    </div>
+
+    <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+        import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+        import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+        
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+        import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+        // --- 1. 場景初始化 ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x000000); 
+        // 初始化霧氣 (黑色)
+        scene.fog = new THREE.FogExp2(0x000000, 0.0); // 初始濃度 0
+
+        const aspect = window.innerWidth / window.innerHeight;
+        const viewSize = 20; // 擴大視窗基準以容納陣列
+
+        // Perspective Camera
+        const perspectiveCamera = new THREE.PerspectiveCamera(39.6, aspect, 0.1, 200);
+        perspectiveCamera.position.set(0, 0, 30); // 拉遠距離看陣列
+        perspectiveCamera.setFocalLength(50);
+
+        // Orthographic Camera
+        const orthoCamera = new THREE.OrthographicCamera(
+            -viewSize * aspect / 2, 
+            viewSize * aspect / 2, 
+            viewSize / 2, 
+            -viewSize / 2, 
+            0.1, 
+            200
+        );
+        orthoCamera.position.set(0, 0, 30);
+
+        let activeCamera = perspectiveCamera;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: false }); 
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ReinhardToneMapping;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(activeCamera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // --- 2. Custom Post-Processing Shaders ---
+
+        // (A) Tri-Channel Dispersion Shader
+        const GrainyBlurShader = {
+            uniforms: {
+                'tDiffuse': { value: null },
+                'uTime': { value: 0.0 },
+                'uNoiseStrength': { value: 0.25 },
+                'uSpeed': { value: 0.5 },
+                'uRGBShift': { value: new THREE.Vector2(0.000, -0.003) },
+                'uDist1': { value: 1.0 },    
+                'uDist2': { value: 2.0 },   
+                'uColor1': { value: new THREE.Color('#ff6251') }, 
+                'uColor2': { value: new THREE.Color('#fff995') }, 
+                'uColor3': { value: new THREE.Color('#00c7fc') }, 
+                'uGrainSize': { value: 3.0 },
+                'uJitterX': { value: 0.010 },
+                'uJitterY': { value: 0.010 },
+                'uJitterZ': { value: 0.010 },
+                'uResolution': { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+                'uBlendMode': { value: 2 }, 
+                'uBlendOpacity': { value: 0.8 } 
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D tDiffuse;
+                uniform float uTime;
+                uniform float uNoiseStrength;
+                uniform float uSpeed;
+                uniform vec2 uRGBShift;
+                uniform float uDist1;
+                uniform float uDist2;
+                uniform vec3 uColor1;
+                uniform vec3 uColor2;
+                uniform vec3 uColor3;
+                uniform float uGrainSize;
+                uniform float uJitterX;
+                uniform float uJitterY;
+                uniform float uJitterZ;
+                uniform vec2 uResolution;
+                uniform int uBlendMode;
+                uniform float uBlendOpacity;
+                varying vec2 vUv;
+
+                float random(vec2 st) {
+                    return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+                }
+
+                vec3 blendOverlay(vec3 base, vec3 blend) {
+                    return mix(2.0 * base * blend, 1.0 - 2.0 * (1.0 - base) * (1.0 - blend), step(0.5, base));
+                }
+                vec3 blendSoftLight(vec3 base, vec3 blend) {
+                    return mix(2.0 * base * blend + base * base * (1.0 - 2.0 * blend), sqrt(base) * (2.0 * blend - 1.0) + 2.0 * base * (1.0 - blend), step(0.5, blend));
+                }
+                vec3 blendScreen(vec3 base, vec3 blend) {
+                    return 1.0 - (1.0 - base) * (1.0 - blend);
+                }
+                vec3 blendDarken(vec3 base, vec3 blend) {
+                    return min(base, blend);
+                }
+
+                void main() {
+                    vec4 baseColor = texture2D(tDiffuse, vUv);
+                    vec2 pixelCoord = gl_FragCoord.xy;
+                    vec2 noiseCoord = floor(pixelCoord / max(uGrainSize, 1.0));
+                    float noise = random(noiseCoord + uTime * uSpeed);
+                    float noiseY = random(noiseCoord + uTime * uSpeed + 100.0);
+                    float noiseZ = random(noiseCoord + uTime * uSpeed + 200.0);
+                    vec2 jitterOffset1 = vec2((noise - 0.5) * uJitterX, (noiseY - 0.5) * uJitterY);
+                    vec2 jitterOffset2 = vec2((noiseY - 0.5) * uJitterY, (noiseZ - 0.5) * uJitterZ);
+                    vec2 jitterOffset3 = vec2((noiseZ - 0.5) * uJitterZ, (noise - 0.5) * uJitterX);
+                    vec2 shift1 = uRGBShift * uDist1;
+                    vec2 shift3 = uRGBShift * uDist2;
+
+                    vec3 c1 = texture2D(tDiffuse, vUv + shift1 + jitterOffset1).rgb * uColor1;
+                    vec3 c2 = texture2D(tDiffuse, vUv + jitterOffset2 * 0.5).rgb * uColor2;
+                    vec3 c3 = texture2D(tDiffuse, vUv - shift3 + jitterOffset3).rgb * uColor3;
+                    
+                    vec3 caColor = c1 + c2 + c3;
+                    vec3 blendedColor = caColor;
+
+                    if (uBlendMode == 1) blendedColor = blendOverlay(baseColor.rgb, caColor);
+                    else if (uBlendMode == 2) blendedColor = blendSoftLight(baseColor.rgb, caColor);
+                    else if (uBlendMode == 3) blendedColor = blendScreen(baseColor.rgb, caColor);
+                    else if (uBlendMode == 4) blendedColor = blendDarken(baseColor.rgb, caColor);
+
+                    vec3 finalColor = mix(caColor, blendedColor, uBlendOpacity);
+
+                    float luminance = dot(finalColor, vec3(0.299, 0.587, 0.114));
+                    float mask = smoothstep(0.0, 0.5, luminance);
+                    float grain = (noise - 0.5) * uNoiseStrength;
+                    finalColor += grain * mask * 1.5;
+
+                    gl_FragColor = vec4(finalColor, 1.0);
+                }
+            `
+        };
+
+        // (B) Frosted Glass Shader
+        const FrostedGlassShader = {
+            uniforms: {
+                'tDiffuse': { value: null },
+                'uFrostStrength': { value: 0.02 }, 
+                'uResolution': { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+                'uSeed': { value: 0.0 }
+            },
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D tDiffuse;
+                uniform float uFrostStrength;
+                uniform vec2 uResolution;
+                uniform float uSeed;
+                varying vec2 vUv;
+
+                float random(vec2 st) {
+                    return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+                }
+
+                void main() {
+                    vec4 color = vec4(0.0);
+                    float total = 0.0;
+                    
+                    if (uFrostStrength <= 0.001) {
+                        gl_FragColor = texture2D(tDiffuse, vUv);
+                        return;
+                    }
+
+                    float samples = 8.0;
+                    float radius = uFrostStrength * 0.05;
+
+                    color += texture2D(tDiffuse, vUv);
+                    total += 1.0;
+
+                    for (float i = 0.0; i < samples; i++) {
+                        float angle = random(vUv + i + uSeed) * 6.283185;
+                        float dist = random(vUv + i + uSeed + 10.0) * radius;
+                        vec2 offset = vec2(cos(angle), sin(angle)) * dist;
+                        offset.x *= uResolution.y / uResolution.x;
+                        color += texture2D(tDiffuse, vUv + offset);
+                        total += 1.0;
+                    }
+                    
+                    gl_FragColor = color / total;
+                }
+            `
+        };
+
+
+        // --- 3. Post-Processing Setup ---
+        const renderScene = new RenderPass(scene, activeCamera);
+
+        const bloomPass = new UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            0.2, 0.3, 0.1
+        );
+
+        const grainyBlurPass = new ShaderPass(GrainyBlurShader);
+        const frostedGlassPass = new ShaderPass(FrostedGlassShader);
+        const outputPass = new OutputPass();
+
+        const composer = new EffectComposer(renderer);
+        composer.addPass(renderScene);
+        composer.addPass(bloomPass);     
+        composer.addPass(grainyBlurPass); 
+        composer.addPass(frostedGlassPass);
+        composer.addPass(outputPass);
+
+        // --- 4. Main Object Shader (With Fog Support) ---
+        const vertexShader = `
+            #include <common>
+            #include <fog_pars_vertex> // 引入霧氣參數
+
+            varying vec3 vNormal;
+            varying vec2 vUv;
+            
+            void main() {
+                vUv = uv;
+                vNormal = normalize(normalMatrix * normal);
+                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
+                
+                #include <fog_vertex> // 計算霧氣深度
+            }
+        `;
+
+        const fragmentShader = `
+            #include <common>
+            #include <fog_pars_fragment> // 引入霧氣參數
+
+            uniform vec3 uColorLight;
+            uniform vec3 uColorMid;
+            uniform vec3 uColorSSS;    
+            uniform vec3 uColorShadow;
+            
+            uniform vec3 uLightPos1;
+            uniform float uLightIntensity1;
+            uniform vec3 uLightPos2;
+            uniform float uLightIntensity2;
+
+            uniform float uNoiseScale;
+            uniform float uNoiseSpeed;
+            uniform float uTime;
+            uniform vec3 uRGBShift;
+
+            varying vec3 vNormal;
+            varying vec2 vUv;
+
+            float random(vec2 st) {
+                return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+            }
+
+            float getColorChannel(float noisyLight, float shadow, float sss, float mid, float light) {
+                float mixSSS = smoothstep(0.15, 0.25, noisyLight);
+                float mixMid = smoothstep(0.35, 0.45, noisyLight);
+                float mixLight = smoothstep(0.70, 0.80, noisyLight);
+                
+                float val = mix(shadow, sss, mixSSS);
+                val = mix(val, mid, mixMid);
+                val = mix(val, light, mixLight);
+                return val;
+            }
+
+            void main() {
+                // Light 1
+                vec3 lightDir1 = normalize(uLightPos1); 
+                float diffuse1 = max(0.0, dot(vNormal, lightDir1));
+                float lightValue1 = diffuse1 * uLightIntensity1;
+
+                // Light 2
+                vec3 lightDir2 = normalize(uLightPos2);
+                float diffuse2 = max(0.0, dot(vNormal, lightDir2));
+                float lightValue2 = diffuse2 * uLightIntensity2;
+
+                float totalLightValue = lightValue1 + lightValue2;
+
+                vec2 noiseCoord = gl_FragCoord.xy * uNoiseScale;
+                float timeOffset = floor(uTime * uNoiseSpeed * 60.0);
+
+                float noiseR = random(noiseCoord + vec2(timeOffset + uRGBShift.x, timeOffset));
+                float noiseG = random(noiseCoord + vec2(timeOffset + uRGBShift.y, timeOffset));
+                float noiseB = random(noiseCoord + vec2(timeOffset + uRGBShift.z, timeOffset));
+                
+                vec3 finalColor;
+                
+                float noisyLightR = totalLightValue + (noiseR - 0.5) * 0.5;
+                finalColor.r = getColorChannel(noisyLightR, uColorShadow.r, uColorSSS.r, uColorMid.r, uColorLight.r);
+                
+                float noisyLightG = totalLightValue + (noiseG - 0.5) * 0.5;
+                finalColor.g = getColorChannel(noisyLightG, uColorShadow.g, uColorSSS.g, uColorMid.g, uColorLight.g);
+
+                float noisyLightB = totalLightValue + (noiseB - 0.5) * 0.5;
+                finalColor.b = getColorChannel(noisyLightB, uColorShadow.b, uColorSSS.b, uColorMid.b, uColorLight.b);
+
+                float shadowMask = smoothstep(0.0, 0.15, totalLightValue); 
+                finalColor *= shadowMask;
+
+                gl_FragColor = vec4(finalColor, 1.0);
+                
+                #include <fog_fragment> // 應用霧氣混合
+            }
+        `;
+
+        // --- 5. 建立材質與物體 ---
+        const material = new THREE.ShaderMaterial({
+            vertexShader: vertexShader,
+            fragmentShader: fragmentShader,
+            fog: true, // 重要：開啟霧氣支援
+            uniforms: THREE.UniformsUtils.merge([
+                THREE.UniformsLib['fog'], // 引入內建霧氣 uniforms
+                {
+                    uColorLight: { value: new THREE.Color('#aaddff') },
+                    uColorMid: { value: new THREE.Color('#3300ff') },
+                    uColorSSS: { value: new THREE.Color('#ff2200') },
+                    uColorShadow: { value: new THREE.Color('#440022') },
+                    
+                    uLightPos1: { value: new THREE.Vector3(2, 1, 4) },
+                    uLightIntensity1: { value: 1.2 },
+                    
+                    uLightPos2: { value: new THREE.Vector3(-3, -1, 4) },
+                    uLightIntensity2: { value: 0.8 },
+
+                    uNoiseScale: { value: 0.4 },
+                    uTime: { value: 0 },
+                    uNoiseSpeed: { value: 0.15 },
+                    uRGBShift: { value: new THREE.Vector3(3.0, 0.0, -3.0) } 
+                }
+            ])
+        });
+
+        // 光源指示器
+        const lightHelperGeo = new THREE.SphereGeometry(0.2, 16, 16);
+        const lightHelperMat1 = new THREE.MeshBasicMaterial({ color: 0xaaddff });
+        const lightHelper1 = new THREE.Mesh(lightHelperGeo, lightHelperMat1);
+        lightHelper1.position.set(2, 1, 4);
+        scene.add(lightHelper1);
+
+        const lightHelperMat2 = new THREE.MeshBasicMaterial({ color: 0xffaadd }); 
+        const lightHelper2 = new THREE.Mesh(lightHelperGeo, lightHelperMat2);
+        lightHelper2.position.set(-3, -1, 4);
+        scene.add(lightHelper2);
+
+        // --- 字體與陣列邏輯 ---
+        const loader = new FontLoader();
+        let instancedMesh;
+        let loadedFont = null;
+
+        // 參數與重建函式
+        const arrayParams = {
+            thickness: 0.6,
+            countX: 1,
+            countY: 1,
+            countZ: 1,
+            spacing: 3.0
+        };
+
+        function createTextArray() {
+            if (!loadedFont) return;
+            
+            // 如果已經有舊的 mesh，移除它
+            if (instancedMesh) {
+                scene.remove(instancedMesh);
+                instancedMesh.geometry.dispose();
+            }
+
+            // 1. 建立幾何體 (根據厚度)
+            const geometry = new TextGeometry('23', {
+                font: loadedFont,
+                size: 1.8,
+                height: arrayParams.thickness, // 動態厚度
+                curveSegments: 12,
+                bevelEnabled: true,
+                bevelThickness: 0.1,
+                bevelSize: 0.04,
+                bevelOffset: 0,
+                bevelSegments: 12
+            });
+            geometry.center();
+
+            // 2. 建立 InstancedMesh
+            const totalCount = arrayParams.countX * arrayParams.countY * arrayParams.countZ;
+            instancedMesh = new THREE.InstancedMesh(geometry, material, totalCount);
+            
+            // 3. 排列矩陣
+            const dummy = new THREE.Object3D();
+            let i = 0;
+            
+            // 計算置中偏移
+            const offsetX = (arrayParams.countX - 1) * arrayParams.spacing * 0.5;
+            const offsetY = (arrayParams.countY - 1) * arrayParams.spacing * 0.5;
+            const offsetZ = (arrayParams.countZ - 1) * arrayParams.spacing * 0.5;
+
+            for (let x = 0; x < arrayParams.countX; x++) {
+                for (let y = 0; y < arrayParams.countY; y++) {
+                    for (let z = 0; z < arrayParams.countZ; z++) {
+                        
+                        dummy.position.set(
+                            x * arrayParams.spacing - offsetX,
+                            y * arrayParams.spacing - offsetY,
+                            z * arrayParams.spacing - offsetZ
+                        );
+                        
+                        dummy.updateMatrix();
+                        instancedMesh.setMatrixAt(i++, dummy.matrix);
+                    }
+                }
+            }
+            
+            instancedMesh.instanceMatrix.needsUpdate = true;
+            scene.add(instancedMesh);
+        }
+
+        loader.load( 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/fonts/helvetiker_bold.typeface.json', function ( font ) {
+            loadedFont = font;
+            createTextArray();
+            document.getElementById('loading').style.opacity = 0;
+        });
+
+        // --- 6. GUI 控制面板 ---
+        const gui = new GUI();
+        
+        const params = {
+            // Camera
+            perspective: true, 
+            focalLength: 50, 
+
+            // Atmosphere (Fog)
+            fogDensity: 0.00, // 初始霧氣濃度
+
+            // Colors
+            lightColor: '#aaddff',
+            midColor: '#004d65',
+            sssColor: '#00364a',
+            shadowColor: '#00c7fc',
+            
+            // Light 1
+            light1Intensity: 1.2,
+            light1X: 2,
+            light1Y: 1,
+            light1Z: 4,
+
+            // Light 2
+            light2Intensity: 0.8,
+            light2X: -3,
+            light2Y: -1,
+            light2Z: 4,
+
+            lightHelperSize: 0,
+
+            // Bloom
+            bloomStrength: 0.2,
+            bloomRadius: 0.3,
+            
+            // Dispersion & Blend
+            dispersionX: 0.000,
+            dispersionY: -0.006,
+            grainSize: 4.0,
+            noiseStrength: 0.25,
+            jitterX: 0.008,
+            jitterY: 0.008,
+            jitterZ: 0.008,
+            
+            color1: '#ff6251', 
+            color2: '#fff995', 
+            color3: '#00c7fc', 
+            
+            dist1: 0.745,
+            dist2: 2.0,
+            blendMode: 'normal',
+            blendOpacity: 0.8,
+
+            // Frosted Glass
+            frostStrength: 0.06
+        };
+
+        const folderCamera = gui.addFolder('Camera Settings');
+        folderCamera.add(params, 'perspective').name('Perspective Mode').onChange(val => {
+            if (val) {
+                activeCamera = perspectiveCamera;
+                activeCamera.position.copy(orthoCamera.position);
+                activeCamera.rotation.copy(orthoCamera.rotation);
+                activeCamera.setFocalLength(params.focalLength);
+            } else {
+                activeCamera = orthoCamera;
+                activeCamera.position.copy(perspectiveCamera.position);
+                activeCamera.rotation.copy(perspectiveCamera.rotation);
+                
+                const dist = activeCamera.position.distanceTo(new THREE.Vector3(0,0,0));
+                const vFov = perspectiveCamera.fov;
+                const frustumHeight = 2.0 * dist * Math.tan(THREE.MathUtils.degToRad(vFov * 0.5));
+                const frustumWidth = frustumHeight * aspect;
+                
+                activeCamera.left = -frustumWidth / 2;
+                activeCamera.right = frustumWidth / 2;
+                activeCamera.top = frustumHeight / 2;
+                activeCamera.bottom = -frustumHeight / 2;
+                activeCamera.updateProjectionMatrix();
+                activeCamera.zoom = 1; 
+            }
+            controls.object = activeCamera;
+            renderScene.camera = activeCamera;
+            controls.update();
+        });
+        folderCamera.add(params, 'focalLength', [20, 24, 35, 50, 75, 85, 100, 135, 200]).name('Focal Length').onChange(val => {
+            if (activeCamera.isPerspectiveCamera) {
+                activeCamera.setFocalLength(val);
+            }
+        });
+
+        // Geometry & Array Folder
+        const folderGeo = gui.addFolder('Geometry & Array');
+        folderGeo.add(arrayParams, 'thickness', 0.1, 5.0).name('Text Thickness').onChange(createTextArray);
+        folderGeo.add(arrayParams, 'countX', 1, 10, 1).name('Count X').onChange(createTextArray);
+        folderGeo.add(arrayParams, 'countY', 1, 10, 1).name('Count Y').onChange(createTextArray);
+        folderGeo.add(arrayParams, 'countZ', 1, 10, 1).name('Count Z').onChange(createTextArray);
+        folderGeo.add(arrayParams, 'spacing', 1.0, 10.0).name('Spacing').onChange(createTextArray);
+        folderGeo.open();
+
+        // Atmosphere Folder
+        const folderAtmo = gui.addFolder('Atmosphere (Fog)');
+        folderAtmo.add(params, 'fogDensity', 0.0, 0.45).name('Fog Density').onChange(val => {
+            scene.fog.density = val;
+        });
+        folderAtmo.open();
+
+        const folderColors = gui.addFolder('Object Colors');
+        folderColors.addColor(params, 'lightColor').onChange(val => {
+            material.uniforms.uColorLight.value.set(val);
+            lightHelperMat1.color.set(val);
+        });
+        folderColors.addColor(params, 'midColor').onChange(val => material.uniforms.uColorMid.value.set(val));
+        folderColors.addColor(params, 'sssColor').onChange(val => material.uniforms.uColorSSS.value.set(val));
+        folderColors.addColor(params, 'shadowColor').onChange(val => material.uniforms.uColorShadow.value.set(val));
+        
+        const folderLight = gui.addFolder('Lights & Position');
+        folderLight.add(params, 'light1Intensity', 0.0, 3.0).name('L1 Intensity').onChange(val => material.uniforms.uLightIntensity1.value = val);
+        folderLight.add(params, 'light1X', -20, 20).name('L1 X').onChange(updateLight);
+        folderLight.add(params, 'light1Y', -20, 20).name('L1 Y').onChange(updateLight);
+        folderLight.add(params, 'light1Z', -20, 20).name('L1 Z').onChange(updateLight);
+
+        folderLight.add(params, 'light2Intensity', 0.0, 3.0).name('L2 Intensity').onChange(val => material.uniforms.uLightIntensity2.value = val);
+        folderLight.add(params, 'light2X', -20, 20).name('L2 X').onChange(updateLight);
+        folderLight.add(params, 'light2Y', -20, 20).name('L2 Y').onChange(updateLight);
+        folderLight.add(params, 'light2Z', -20, 20).name('L2 Z').onChange(updateLight);
+        folderLight.add(params, 'lightHelperSize', 0.0, 2.0).name('Helper Size').onChange(val => {
+            lightHelper1.scale.set(val, val, val);
+            lightHelper2.scale.set(val, val, val);
+        });
+
+        const folderGlobal = gui.addFolder('Bloom');
+        folderGlobal.add(params, 'bloomStrength', 0.0, 0.6).onChange(val => bloomPass.strength = val);
+        folderGlobal.add(params, 'bloomRadius', 0.0, 1).onChange(val => bloomPass.radius = val);
+        
+        const folderDispersion = gui.addFolder('Dispersion & Blend');
+        folderDispersion.add(params, 'dispersionX', -0.02, 0.02).name('Vector X').onChange(updatePostShift);
+        folderDispersion.add(params, 'dispersionY', -0.02, 0.02).name('Vector Y').onChange(updatePostShift);
+        folderDispersion.add(params, 'grainSize', 0.0, 4.0).name('Grain Size').onChange(val => grainyBlurPass.uniforms.uGrainSize.value = val);
+        folderDispersion.add(params, 'noiseStrength', 0.0, 1.0).name('Noise Strength').onChange(val => grainyBlurPass.uniforms.uNoiseStrength.value = val);
+        
+        const folderJitter = folderDispersion.addFolder('Blur Jitter (X/Y/Z)');
+        folderJitter.add(params, 'jitterX', 0.0, 0.1).name('Jitter X').onChange(val => grainyBlurPass.uniforms.uJitterX.value = val);
+        folderJitter.add(params, 'jitterY', 0.0, 0.1).name('Jitter Y').onChange(val => grainyBlurPass.uniforms.uJitterY.value = val);
+        folderJitter.add(params, 'jitterZ', 0.0, 0.1).name('Jitter Z').onChange(val => grainyBlurPass.uniforms.uJitterZ.value = val);
+        
+        const folderChannels = folderDispersion.addFolder('Dispersion Colors (R-Y-B)');
+        folderChannels.addColor(params, 'color1').name('Channel 1 (L)').onChange(val => grainyBlurPass.uniforms.uColor1.value.set(val));
+        folderChannels.addColor(params, 'color2').name('Channel 2 (M)').onChange(val => grainyBlurPass.uniforms.uColor2.value.set(val));
+        folderChannels.addColor(params, 'color3').name('Channel 3 (R)').onChange(val => grainyBlurPass.uniforms.uColor3.value.set(val));
+        folderChannels.add(params, 'dist1', 0.0, 5.0).name('Dist 1 (L)').onChange(val => grainyBlurPass.uniforms.uDist1.value = val);
+        folderChannels.add(params, 'dist2', 0.0, 5.0).name('Dist 3 (R)').onChange(val => grainyBlurPass.uniforms.uDist2.value = val);
+
+        const blendModes = { 'Normal': 0, 'Overlay': 1, 'SoftLight': 2, 'Screen': 3, 'Darken': 4 };
+        folderDispersion.add(params, 'blendMode', Object.keys(blendModes)).name('Blend Mode').onChange(val => {
+            grainyBlurPass.uniforms.uBlendMode.value = blendModes[val];
+        });
+        folderDispersion.add(params, 'blendOpacity', 0.0, 1.0).name('Blend Opacity').onChange(val => grainyBlurPass.uniforms.uBlendOpacity.value = val);
+
+        const folderFrost = gui.addFolder('Frosted Glass Layer');
+        folderFrost.add(params, 'frostStrength', 0.0, 0.2).name('Frost Strength').onChange(val => {
+            frostedGlassPass.uniforms.uFrostStrength.value = val;
+        });
+
+        function updateLight() {
+            material.uniforms.uLightPos1.value.set(params.light1X, params.light1Y, params.light1Z);
+            material.uniforms.uLightPos2.value.set(params.light2X, params.light2Y, params.light2Z);
+            
+            lightHelper1.position.set(params.light1X, params.light1Y, params.light1Z);
+            lightHelper2.position.set(params.light2X, params.light2Y, params.light2Z);
+        }
+
+        function updatePostShift() {
+            grainyBlurPass.uniforms.uRGBShift.value.set(params.dispersionX, params.dispersionY);
+        }
+
+        // --- 7. 動畫循環 ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            const elapsedTime = clock.getElapsedTime();
+            
+            material.uniforms.uTime.value = elapsedTime;
+            grainyBlurPass.uniforms.uTime.value = elapsedTime;
+
+            controls.update();
+            composer.render();
+        }
+
+        animate();
+
+        // ========== 初始化同步：讓 params 的值套用到實際 uniforms ==========
+        function syncParamsToUniforms() {
+            // Fog
+            scene.fog.density = params.fogDensity;
+            
+            // Object Colors
+            material.uniforms.uColorLight.value.set(params.lightColor);
+            material.uniforms.uColorMid.value.set(params.midColor);
+            material.uniforms.uColorSSS.value.set(params.sssColor);
+            material.uniforms.uColorShadow.value.set(params.shadowColor);
+            
+            // Lights
+            material.uniforms.uLightIntensity1.value = params.light1Intensity;
+            material.uniforms.uLightIntensity2.value = params.light2Intensity;
+            material.uniforms.uLightPos1.value.set(params.light1X, params.light1Y, params.light1Z);
+            material.uniforms.uLightPos2.value.set(params.light2X, params.light2Y, params.light2Z);
+            lightHelper1.position.set(params.light1X, params.light1Y, params.light1Z);
+            lightHelper2.position.set(params.light2X, params.light2Y, params.light2Z);
+            lightHelper1.scale.setScalar(params.lightHelperSize);
+            lightHelper2.scale.setScalar(params.lightHelperSize);
+            
+            // Bloom
+            bloomPass.strength = params.bloomStrength;
+            bloomPass.radius = params.bloomRadius;
+            
+            // Dispersion
+            grainyBlurPass.uniforms.uRGBShift.value.set(params.dispersionX, params.dispersionY);
+            grainyBlurPass.uniforms.uGrainSize.value = params.grainSize;
+            grainyBlurPass.uniforms.uNoiseStrength.value = params.noiseStrength;
+            grainyBlurPass.uniforms.uJitterX.value = params.jitterX;
+            grainyBlurPass.uniforms.uJitterY.value = params.jitterY;
+            grainyBlurPass.uniforms.uJitterZ.value = params.jitterZ;
+            grainyBlurPass.uniforms.uColor1.value.set(params.color1);
+            grainyBlurPass.uniforms.uColor2.value.set(params.color2);
+            grainyBlurPass.uniforms.uColor3.value.set(params.color3);
+            grainyBlurPass.uniforms.uDist1.value = params.dist1;
+            grainyBlurPass.uniforms.uDist2.value = params.dist2;
+            
+            // Blend Mode
+            const blendModeMap = { 'Normal': 0, 'Overlay': 1, 'SoftLight': 2, 'Screen': 3, 'Darken': 4 };
+            grainyBlurPass.uniforms.uBlendMode.value = blendModeMap[params.blendMode] ?? 0;
+            grainyBlurPass.uniforms.uBlendOpacity.value = params.blendOpacity;
+            
+            // Frost
+            frostedGlassPass.uniforms.uFrostStrength.value = params.frostStrength;
+        }
+        
+        // ========== 儲存/載入功能 ==========
+        const STORAGE_KEY = 'effect_params_v1';
+        
+        function saveParams() {
+            const saveData = JSON.stringify(params);
+            localStorage.setItem(STORAGE_KEY, saveData);
+            alert('✅ 設定已儲存！');
+        }
+        
+        function loadParams() {
+            const savedData = localStorage.getItem(STORAGE_KEY);
+            if (savedData) {
+                try {
+                    const loaded = JSON.parse(savedData);
+                    Object.assign(params, loaded);
+                    return true;
+                } catch (e) {
+                    console.warn('載入設定失敗:', e);
+                }
+            }
+            return false;
+        }
+        
+        function resetParams() {
+            localStorage.removeItem(STORAGE_KEY);
+            alert('🔄 設定已重置，請重新整理頁面');
+        }
+        
+        // 嘗試載入已儲存的設定
+        const hasLoaded = loadParams();
+        
+        // 執行同步
+        syncParamsToUniforms();
+        
+        // 更新 GUI 顯示（如果有載入設定）
+        if (hasLoaded) {
+            gui.controllersRecursive().forEach(c => c.updateDisplay());
+        }
+        
+        // 加入儲存/重置按鈕
+        const folderSave = gui.addFolder('💾 Save / Load');
+        folderSave.add({ save: saveParams }, 'save').name('💾 儲存設定');
+        folderSave.add({ reset: resetParams }, 'reset').name('🔄 重置設定');
+        folderSave.open();
+
+        window.addEventListener('resize', () => {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            const newAspect = width / height;
+
+            // Update Perspective Camera
+            perspectiveCamera.aspect = newAspect;
+            perspectiveCamera.updateProjectionMatrix();
+
+            // Update Orthographic Camera
+            // 重新計算邊界，保持視窗比例
+            orthoCamera.left = -viewSize * newAspect / 2;
+            orthoCamera.right = viewSize * newAspect / 2;
+            orthoCamera.top = viewSize / 2;
+            orthoCamera.bottom = -viewSize / 2;
+            orthoCamera.updateProjectionMatrix();
+
+            renderer.setSize(width, height);
+            composer.setSize(width, height);
+            grainyBlurPass.uniforms.uResolution.value.set(width, height);
+            frostedGlassPass.uniforms.uResolution.value.set(width, height); 
+        });
+    </script>
+</body>
+</html>

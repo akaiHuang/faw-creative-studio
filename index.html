@@ -1,0 +1,452 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Terminal, Database, Cpu, Zap, Share2, Shield, Activity, Lock, ChevronRight, Menu, X, ArrowRight, Smartphone, Instagram, Send, Disc, Grid, Crosshair } from 'lucide-react';
+
+/**
+ * Universal FAW Studio - V2: SCHEMATIC / RAW DATA
+ * * Concept: Industrial Blueprint, Raw Data, Tactical HUD.
+ * * Style: High contrast, wireframes, grid lines, monospace dominance.
+ */
+
+const App = () => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [currentTime, setCurrentTime] = useState('');
+
+  // Scroll detection & Clock
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 50);
+    window.addEventListener('scroll', handleScroll);
+    
+    const timer = setInterval(() => {
+      const d = new Date();
+      setCurrentTime(`${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`);
+    }, 1000);
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      clearInterval(timer);
+    }
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-[#000] text-[#EAEAEA] font-mono overflow-x-hidden selection:bg-[#FF004D] selection:text-black">
+      {/* Global Styles */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700&family=Chakra+Petch:wght@400;600;700&display=swap');
+        
+        :root {
+          --c-primary: #00FF99;
+          --c-alert: #FF004D;
+          --c-dark: #050505;
+          --c-grid: #1A1A1A;
+        }
+
+        .font-tech { font-family: 'Chakra Petch', sans-serif; }
+        .font-code { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Blueprint Grid Background */
+        .bg-grid-pattern {
+          background-size: 40px 40px;
+          background-image:
+            linear-gradient(to right, var(--c-grid) 1px, transparent 1px),
+            linear-gradient(to bottom, var(--c-grid) 1px, transparent 1px);
+        }
+
+        /* 3D Wireframe Cube */
+        .scene { perspective: 800px; }
+        .cube {
+          width: 160px; height: 160px; position: relative;
+          transform-style: preserve-3d;
+          animation: spin 10s infinite linear;
+        }
+        .face {
+          position: absolute; width: 160px; height: 160px;
+          border: 1px solid var(--c-primary);
+          background: rgba(0, 255, 153, 0.05);
+          display: flex; align-items: center; justify-content: center;
+          font-family: 'JetBrains Mono'; font-size: 10px; color: var(--c-primary);
+        }
+        .front  { transform: translateZ(80px); }
+        .back   { transform: rotateY(180deg) translateZ(80px); }
+        .right  { transform: rotateY(90deg) translateZ(80px); }
+        .left   { transform: rotateY(-90deg) translateZ(80px); }
+        .top    { transform: rotateX(90deg) translateZ(80px); }
+        .bottom { transform: rotateX(-90deg) translateZ(80px); }
+
+        @keyframes spin {
+          0% { transform: rotateX(-15deg) rotateY(0deg); }
+          100% { transform: rotateX(-15deg) rotateY(360deg); }
+        }
+
+        /* Scanline Overlay */
+        .scanline {
+          position: fixed; top: 0; left: 0; w: 100%; h: 100%; pointer-events: none;
+          background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
+          background-size: 100% 4px;
+          z-index: 9999;
+          opacity: 0.15;
+        }
+        
+        .border-corner {
+          position: relative;
+        }
+        .border-corner::before, .border-corner::after {
+          content: ''; position: absolute; width: 8px; height: 8px;
+          border: 1px solid #555; transition: all 0.3s;
+        }
+        .border-corner::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+        .border-corner::after { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+        .border-corner:hover::before { border-color: var(--c-primary); width: 100%; height: 100%; }
+        .border-corner:hover::after { border-color: var(--c-primary); width: 100%; height: 100%; }
+
+      `}</style>
+      
+      <div className="scanline"></div>
+
+      {/* Header / HUD Top Bar */}
+      <nav className="fixed w-full z-50 border-b border-[#222] bg-[#000]/90 backdrop-blur-sm font-code text-xs">
+        <div className="flex justify-between items-stretch h-12">
+          {/* Logo Area */}
+          <div className="flex items-center px-4 border-r border-[#222] bg-[#111]">
+             <Crosshair className="w-4 h-4 text-[#FF004D] mr-2 animate-spin-slow" />
+             <span className="tracking-widest font-bold">U-FAW<span className="text-[#333]">_SYS</span></span>
+          </div>
+
+          {/* Marquee / Status */}
+          <div className="hidden md:flex flex-1 items-center px-4 overflow-hidden text-[#555]">
+            <span className="animate-pulse mr-4 text-[#00FF99]">● SYSTEM OPTIMAL</span>
+            <span className="mr-8">LOAD: 12%</span>
+            <span className="mr-8">LATENCY: 4ms</span>
+            <span className="mr-8 truncate">LATEST: PROJECT "NEON TEMPLE" DEPLOYED SUCCESSFULLY...</span>
+          </div>
+
+          {/* Clock & Menu */}
+          <div className="flex items-center">
+            <div className="hidden md:flex items-center px-6 border-l border-[#222] h-full text-[#00FF99]">
+              {currentTime} TPE
+            </div>
+            <button 
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="px-6 border-l border-[#222] h-full hover:bg-[#FF004D] hover:text-white transition-colors uppercase"
+            >
+              {isMenuOpen ? 'Close_X' : 'Menu_+'}
+            </button>
+          </div>
+        </div>
+      </nav>
+      
+      {/* Fullscreen Mobile Menu */}
+      {isMenuOpen && (
+        <div className="fixed inset-0 z-40 bg-black/95 flex flex-col justify-center items-center font-tech space-y-8 text-2xl tracking-widest">
+           <a href="#hero" onClick={() => setIsMenuOpen(false)} className="hover:text-[#00FF99] hover:underline decoration-1 underline-offset-8">01 // INITIALIZE</a>
+           <a href="#solutions" onClick={() => setIsMenuOpen(false)} className="hover:text-[#00FF99] hover:underline decoration-1 underline-offset-8">02 // PROTOCOLS</a>
+           <a href="#lab" onClick={() => setIsMenuOpen(false)} className="hover:text-[#00FF99] hover:underline decoration-1 underline-offset-8">03 // PLAYGROUND</a>
+           <a href="#maker" onClick={() => setIsMenuOpen(false)} className="hover:text-[#00FF99] hover:underline decoration-1 underline-offset-8">04 // CONFIG</a>
+           <a href="#contact" onClick={() => setIsMenuOpen(false)} className="hover:text-[#FF004D] hover:underline decoration-1 underline-offset-8 text-[#FF004D]">05 // TERMINATE</a>
+        </div>
+      )}
+
+      {/* Main Content Container */}
+      <main className="pt-12 bg-grid-pattern">
+        
+        {/* HERO SECTION - SCHEMATIC STYLE */}
+        <section id="hero" className="min-h-screen flex flex-col justify-center relative border-b border-[#222]">
+          <div className="absolute top-4 left-4 md:top-12 md:left-12 border border-[#333] p-2 text-[10px] text-[#555]">
+            COORD: 25.0330° N, 121.5654° E<br/>
+            SECTOR: XINYI DIST<br/>
+            MODE: HEAVY_IND
+          </div>
+
+          <div className="max-w-7xl mx-auto px-4 w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            {/* Text Block */}
+            <div className="lg:col-span-7 relative z-10">
+              <div className="inline-flex items-center border border-[#FF004D] px-3 py-1 text-[#FF004D] text-xs font-bold mb-6 tracking-widest">
+                <span className="w-2 h-2 bg-[#FF004D] mr-2 animate-pulse"></span>
+                LIVE SIGNAL
+              </div>
+              <h1 className="font-tech text-6xl md:text-8xl leading-[0.9] mb-8 uppercase text-white mix-blend-difference">
+                Digital<br/>
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#00FF99] to-transparent">Heavy</span><br/>
+                Industries
+              </h1>
+              <div className="flex items-start border-l-2 border-[#333] pl-6 max-w-xl">
+                 <p className="font-code text-gray-400 text-sm md:text-base leading-relaxed">
+                   [MANIFESTO]<br/>
+                   為品牌打造軍規級的互動建設。<br/>
+                   我們不生產網頁，我們鍛造<span className="text-white border-b border-white">數位資產</span>。
+                 </p>
+              </div>
+              
+              <div className="mt-12 flex flex-wrap gap-4">
+                 <button className="group relative px-8 py-3 bg-[#00FF99] text-black font-bold text-sm tracking-wider overflow-hidden">
+                    <span className="relative z-10 flex items-center">ENTER LAB <ArrowRight className="ml-2 w-4 h-4"/></span>
+                    <div className="absolute inset-0 bg-white transform -translate-x-full group-hover:translate-x-0 transition-transform duration-300"></div>
+                 </button>
+                 <button className="px-8 py-3 border border-[#333] text-gray-400 hover:border-[#FF004D] hover:text-[#FF004D] transition-colors text-sm tracking-wider">
+                    VIEW_SPECS.PDF
+                 </button>
+              </div>
+            </div>
+
+            {/* Visual Block - Wireframe Cube */}
+            <div className="lg:col-span-5 flex justify-center items-center h-[400px] border border-[#222] bg-[#050505] relative overflow-hidden">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_#111_0%,_#000_100%)]"></div>
+              
+              {/* Grid Lines Overlay */}
+              <div className="absolute inset-0" style={{backgroundImage: 'linear-gradient(rgba(0,255,153,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,153,0.1) 1px, transparent 1px)', backgroundSize: '20px 20px'}}></div>
+
+              <div className="scene relative z-10">
+                <div className="cube">
+                  <div className="face front">U-FAW</div>
+                  <div className="face back">SYS</div>
+                  <div className="face right">DATA</div>
+                  <div className="face left">CODE</div>
+                  <div className="face top"></div>
+                  <div className="face bottom"></div>
+                </div>
+              </div>
+
+              {/* Data decorations */}
+              <div className="absolute top-2 right-2 text-[10px] text-[#00FF99] font-code text-right">
+                RENDERING...<br/>
+                FPS: 60
+              </div>
+              <div className="absolute bottom-2 left-2 text-[10px] text-[#333] font-code">
+                OBJ: CUBE_01
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* SOLUTIONS - DUAL TERMINAL STYLE */}
+        <section id="solutions" className="grid grid-cols-1 md:grid-cols-2 border-b border-[#222]">
+           {/* Left Terminal */}
+           <div className="border-r border-[#222] p-8 md:p-16 hover:bg-[#080808] transition-colors group relative">
+             <div className="absolute top-4 right-4"><Shield className="text-[#333] group-hover:text-blue-500 transition-colors" /></div>
+             <h3 className="text-blue-500 font-code text-xs mb-2 tracking-widest">[ SECTOR_A: AGENCY ]</h3>
+             <h2 className="font-tech text-4xl mb-6 text-white">AGENCY<br/>PROTOCOL</h2>
+             <div className="font-code text-xs text-gray-500 space-y-4 mb-8">
+               <div className="flex justify-between border-b border-[#222] pb-2">
+                 <span>UPTIME_GUARANTEE</span>
+                 <span className="text-white">99.99%</span>
+               </div>
+               <div className="flex justify-between border-b border-[#222] pb-2">
+                 <span>WHITE_LABEL_MODE</span>
+                 <span className="text-white">ACTIVE</span>
+               </div>
+               <div className="flex justify-between border-b border-[#222] pb-2">
+                 <span>LINE_OA_MODULE</span>
+                 <span className="text-white">INSTALLED</span>
+               </div>
+             </div>
+             <p className="text-gray-400 text-sm mb-6">
+               "穩定"是我們的核心算法。我們為代理商提供隱形且堅固的技術後盾。
+             </p>
+             <button className="text-blue-500 text-xs border border-blue-500/30 px-4 py-2 hover:bg-blue-500 hover:text-white transition-colors">
+               ACCESS_DOCS
+             </button>
+           </div>
+
+           {/* Right Terminal */}
+           <div className="p-8 md:p-16 hover:bg-[#080808] transition-colors group relative overflow-hidden">
+             {/* Glitch Overlay */}
+             <div className="absolute inset-0 bg-noise opacity-5 pointer-events-none"></div>
+             
+             <div className="absolute top-4 right-4"><Zap className="text-[#333] group-hover:text-[#FF004D] transition-colors" /></div>
+             <h3 className="text-[#FF004D] font-code text-xs mb-2 tracking-widest">[ SECTOR_B: WEB3 ]</h3>
+             <h2 className="font-tech text-4xl mb-6 text-white group-hover:animate-pulse">INNOVATION<br/>FRONTIER</h2>
+             <div className="font-code text-xs text-gray-500 space-y-4 mb-8">
+               <div className="flex justify-between border-b border-[#222] pb-2">
+                 <span>TOKEN_GATE</span>
+                 <span className="text-[#00FF99]">ENABLED</span>
+               </div>
+               <div className="flex justify-between border-b border-[#222] pb-2">
+                 <span>GEN_AI_ENGINE</span>
+                 <span className="text-[#00FF99]">STANDBY</span>
+               </div>
+               <div className="flex justify-between border-b border-[#222] pb-2">
+                 <span>VISUAL_BONDING</span>
+                 <span className="text-[#00FF99]">V.2.0</span>
+               </div>
+             </div>
+             <p className="text-gray-400 text-sm mb-6">
+               實驗性質的技術沙盒。故障藝術、鏈上數據、生成式行銷。
+             </p>
+             <button className="text-[#FF004D] text-xs border border-[#FF004D]/30 px-4 py-2 hover:bg-[#FF004D] hover:text-black transition-colors">
+               ENTER_NODE
+             </button>
+           </div>
+        </section>
+
+        {/* LAB - DATA GRID STYLE */}
+        <section id="lab" className="py-20 border-b border-[#222] bg-[#020202]">
+           <div className="max-w-7xl mx-auto px-4">
+             <div className="flex items-end justify-between mb-12 border-b border-[#333] pb-4">
+                <div>
+                  <h2 className="font-tech text-4xl text-white">FAW_LAB</h2>
+                  <p className="font-code text-xs text-[#666] mt-2">Experimental Builds // Do Not Distribute</p>
+                </div>
+                <div className="font-code text-xs text-[#00FF99] animate-pulse">
+                   STATUS: RUNNING TESTS
+                </div>
+             </div>
+
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-[#222] border border-[#222]">
+                {/* Demo A */}
+                <div className="bg-black p-8 relative group">
+                   <div className="absolute top-0 left-0 w-2 h-2 border-l border-t border-[#555]"></div>
+                   <div className="absolute top-0 right-0 w-2 h-2 border-r border-t border-[#555]"></div>
+                   <div className="absolute bottom-0 left-0 w-2 h-2 border-l border-b border-[#555]"></div>
+                   <div className="absolute bottom-0 right-0 w-2 h-2 border-r border-b border-[#555]"></div>
+                   
+                   <div className="flex justify-between items-start mb-6">
+                      <div className="bg-[#111] border border-[#333] p-2">
+                         <Activity className="text-[#00FF99] w-6 h-6" />
+                      </div>
+                      <span className="font-code text-[10px] bg-[#00FF99] text-black px-1">ONLINE</span>
+                   </div>
+                   
+                   <h3 className="font-tech text-2xl mb-2 text-white group-hover:text-[#00FF99] transition-colors">CYBER PINBALL</h3>
+                   <p className="font-code text-xs text-gray-500 mb-8 h-12">
+                     WebSocket 低延遲雙機連動測試。手機即時控制大螢幕。
+                   </p>
+                   
+                   <div className="w-full bg-[#111] h-32 mb-6 border border-[#222] relative overflow-hidden">
+                      {/* Grid animation */}
+                      <div className="absolute inset-0" style={{backgroundImage: 'linear-gradient(#00FF99 1px, transparent 1px)', backgroundSize: '100% 20px', opacity: 0.1}}></div>
+                      <div className="absolute bottom-0 left-0 w-full h-1 bg-[#00FF99] animate-[width_2s_ease-in-out_infinite]"></div>
+                   </div>
+
+                   <button className="w-full border border-[#333] py-3 font-code text-xs hover:bg-[#00FF99] hover:text-black transition-colors">
+                     LAUNCH_DEMO.EXE
+                   </button>
+                </div>
+
+                {/* Demo B */}
+                <div className="bg-black p-8 relative group">
+                   <div className="absolute top-0 left-0 w-2 h-2 border-l border-t border-[#555]"></div>
+                   <div className="absolute top-0 right-0 w-2 h-2 border-r border-t border-[#555]"></div>
+                   <div className="absolute bottom-0 left-0 w-2 h-2 border-l border-b border-[#555]"></div>
+                   <div className="absolute bottom-0 right-0 w-2 h-2 border-r border-b border-[#555]"></div>
+                   
+                   <div className="flex justify-between items-start mb-6">
+                      <div className="bg-[#111] border border-[#333] p-2">
+                         <Instagram className="text-[#FF004D] w-6 h-6" />
+                      </div>
+                      <span className="font-code text-[10px] bg-[#FF004D] text-white px-1">POPULAR</span>
+                   </div>
+                   
+                   <h3 className="font-tech text-2xl mb-2 text-white group-hover:text-[#FF004D] transition-colors">AI FORTUNE</h3>
+                   <p className="font-code text-xs text-gray-500 mb-8 h-12">
+                     生成式 AI 算命攤。自動合成 IG 限時動態格式影像。
+                   </p>
+                   
+                   <div className="w-full bg-[#111] h-32 mb-6 border border-[#222] flex items-center justify-center">
+                      <div className="font-tech text-[#333] text-4xl">?</div>
+                   </div>
+
+                   <button className="w-full border border-[#333] py-3 font-code text-xs hover:bg-[#FF004D] hover:text-black transition-colors">
+                     GENERATE_IMG.PY
+                   </button>
+                </div>
+             </div>
+           </div>
+        </section>
+
+        {/* MAKER - COCKPIT STYLE */}
+        <section id="maker" className="py-20 border-b border-[#222] bg-[#050505]">
+          <div className="max-w-5xl mx-auto px-4">
+             <div className="border border-[#333] bg-[#000] p-1 relative">
+                {/* Decorative Rivets */}
+                <div className="absolute top-0 left-0 p-1"><div className="w-1 h-1 bg-[#555] rounded-full"></div></div>
+                <div className="absolute top-0 right-0 p-1"><div className="w-1 h-1 bg-[#555] rounded-full"></div></div>
+                <div className="absolute bottom-0 left-0 p-1"><div className="w-1 h-1 bg-[#555] rounded-full"></div></div>
+                <div className="absolute bottom-0 right-0 p-1"><div className="w-1 h-1 bg-[#555] rounded-full"></div></div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-0">
+                  {/* Left Panel */}
+                  <div className="md:col-span-1 border-r border-[#222] p-8 bg-[#080808]">
+                     <h2 className="font-tech text-2xl text-white mb-2">CONFIGURATOR</h2>
+                     <p className="font-code text-xs text-gray-500 mb-8">
+                       Build your project specs.
+                     </p>
+                     
+                     <div className="space-y-2 font-code text-xs">
+                        <div className="bg-[#111] p-2 text-[#00FF99] border-l-2 border-[#00FF99]">User: GUEST_01</div>
+                        <div className="bg-[#111] p-2 text-gray-500 border-l-2 border-[#333]">Access: RESTRICTED</div>
+                        <div className="mt-8 border border-dashed border-[#333] p-4 text-center">
+                           <Lock className="w-4 h-4 mx-auto mb-2 text-[#555]" />
+                           <span className="text-[#555]">LOGIN REQUIRED</span>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* Right Panel - The Calculator */}
+                  <div className="md:col-span-2 p-8 relative">
+                     <div className="absolute top-4 right-4 text-[10px] text-[#333] font-code">SYS_VER_2.5</div>
+                     
+                     <div className="space-y-4 font-code text-sm">
+                        <div className="flex items-center justify-between p-3 border border-[#222] bg-[#050505]">
+                           <span className="text-gray-300">[x] CORE_AUTH_MODULE</span>
+                           <span className="text-[#00FF99]">REQUIRED</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 border border-[#333] bg-[#111] cursor-pointer hover:border-[#00FF99]">
+                           <span className="text-white">[ ] MODULE_LUCKY_DRAW</span>
+                           <span className="text-gray-500">+ $50,000</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 border border-[#333] bg-[#111] cursor-pointer hover:border-[#00FF99]">
+                           <span className="text-white">[ ] MODULE_IG_SHARE</span>
+                           <span className="text-gray-500">+ $80,000</span>
+                        </div>
+                        <div className="flex items-center justify-between p-3 border border-[#333] bg-[#111] cursor-pointer hover:border-[#00FF99]">
+                           <span className="text-white">[ ] MODULE_CRM_API</span>
+                           <span className="text-gray-500">+ $60,000</span>
+                        </div>
+                     </div>
+
+                     <div className="mt-8 pt-8 border-t border-[#222] flex justify-between items-end">
+                        <div className="text-xs text-[#555]">
+                           CALCULATING RESOURCES...
+                        </div>
+                        <div className="text-right">
+                           <div className="text-xs text-[#00FF99] mb-1">TOTAL_ESTIMATE</div>
+                           <div className="font-tech text-4xl text-white">
+                              $150,000<span className="text-base text-gray-600">.00</span>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+                </div>
+             </div>
+          </div>
+        </section>
+        
+        {/* FOOTER / TERMINAL */}
+        <section id="contact" className="bg-[#000] border-t border-[#222] py-20 font-code">
+           <div className="max-w-2xl mx-auto px-4 text-center">
+              <div className="inline-block border border-[#FF004D] p-1 mb-8">
+                 <div className="bg-[#FF004D] px-4 py-1 text-black font-bold text-xs uppercase">
+                    Transmission Open
+                 </div>
+              </div>
+              
+              <h2 className="font-tech text-4xl text-white mb-8">READY TO INITIALIZE?</h2>
+              
+              <div className="bg-[#080808] border border-[#333] p-2 text-left mb-8">
+                 <div className="flex border-b border-[#333] pb-2 mb-2">
+                    <span className="text-[#555] text-xs px-2">root@faw-studio:~/contact$</span>
+                 </div>
+                 <input type="text" className="w-full bg-transparent text-[#00FF99] focus:outline-none px-2 py-1" placeholder="./send_inquiry --email your@email.com" />
+              </div>
+
+              <button className="bg-[#EAEAEA] text-black px-12 py-3 font-bold hover:bg-[#FF004D] hover:text-white transition-colors uppercase tracking-widest text-sm">
+                 Execute_Handshake
+              </button>
+           </div>
+        </section>
+      </main>
+    </div>
+  );
+};
+
+export default App;
