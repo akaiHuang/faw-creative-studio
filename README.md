@@ -2,9 +2,13 @@
 
 **Interactive Brand Experience with Three.js + Gemini AI -- Where Storytelling Meets Technology**
 
+## 📋 Quick Summary
+
+> 🎨 **FAW Creative Studio** 是 Universal FAW Labs 打造的互動式品牌體驗平台，不只是作品集網站，更是一個活生生的產品展示。🌌 首頁採用 Three.js 建構即時 3D 場景，包含 Cannon.js 物理驅動的品牌字母動畫、GPU 粒子文字特效、以及支援手機陀螺儀的星空背景。🎮 內建完整的太空侵略者風格遊戲引擎，擁有三個版本的演進——從 8-bit 像素風到具備故事敘事的霓虹進化關卡。🤖 整合 Google Gemini AI 提供部落格內容生成與 AI 腦力激盪工作區。💡 模組化報價計算器讓客戶自行組合專案範圍。🛠️ 技術棧涵蓋 Next.js 16、React 19、React Three Fiber、Framer Motion、GSAP、Firebase 後端，並搭配 Copilot SDK 多代理人協作開發流程。🚀 適合創意科技工作室展示技術實力，證明「我們賣的東西，我們自己也能做出來」。
+
 ---
 
-## Why This Exists
+## 💡 Why This Exists
 
 Traditional agency portfolios are static. They present past work in grids and slideshows, but they never demonstrate what the agency can actually build. The medium contradicts the message.
 
@@ -14,7 +18,7 @@ This is not a portfolio website. It is a living product demo that proves the stu
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 ```
 +------------------------------------------------------------------+
@@ -67,7 +71,7 @@ All three respond to device gyroscope data on mobile (with iOS permission handli
 
 ---
 
-## Tech Stack
+## 🛠️ Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
@@ -92,7 +96,7 @@ The project includes extensive documentation for AI-assisted development workflo
 
 ---
 
-## Quick Start
+## 🏁 Quick Start
 
 ```bash
 # Clone and install
@@ -120,6 +124,6 @@ npm run lint       # ESLint
 
 ---
 
-## Author
+## 👤 Author
 
 **Huang Akai (Kai)** -- Founder @ Universal FAW Labs | Creative Technologist | Ex-Ogilvy | 15+ years in digital creative and marketing technology.
