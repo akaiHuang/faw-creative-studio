@@ -2,6 +2,10 @@
 
 **Interactive Brand Experience with Three.js + Gemini AI -- Where Storytelling Meets Technology**
 
+## About
+
+FAW Creative Studio 是一個以互動 3D 與 AI 敘事為核心的品牌體驗平台，將作品集、產品展示與故事化導覽融合在同一個場域。適合用於品牌展示、互動式行銷企劃與創意技術 Demo，呈現「內容即體驗」的網站形態。
+
 ## 📋 Quick Summary
 
 > 🎨 **FAW Creative Studio** 是 Universal FAW Labs 打造的互動式品牌體驗平台，不只是作品集網站，更是一個活生生的產品展示。🌌 首頁採用 Three.js 建構即時 3D 場景，包含 Cannon.js 物理驅動的品牌字母動畫、GPU 粒子文字特效、以及支援手機陀螺儀的星空背景。🎮 內建完整的太空侵略者風格遊戲引擎，擁有三個版本的演進——從 8-bit 像素風到具備故事敘事的霓虹進化關卡。🤖 整合 Google Gemini AI 提供部落格內容生成與 AI 腦力激盪工作區。💡 模組化報價計算器讓客戶自行組合專案範圍。🛠️ 技術棧涵蓋 Next.js 16、React 19、React Three Fiber、Framer Motion、GSAP、Firebase 後端，並搭配 Copilot SDK 多代理人協作開發流程。🚀 適合創意科技工作室展示技術實力，證明「我們賣的東西，我們自己也能做出來」。
